@@ -35,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int GALLERY_REQUEST_CODE = 1;
     private static final int PERMISSION_CODE = 1000;
-    private static final int REQUEST_IMAGE_CAPTURE = 10;
+    private static final int REQUEST_IMAGE_CAPTURE = 1001;
     private Uri image_uri;
 
     private Bitmap mBitmap;
