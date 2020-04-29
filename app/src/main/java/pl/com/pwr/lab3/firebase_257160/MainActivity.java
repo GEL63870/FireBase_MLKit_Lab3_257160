@@ -35,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int GALLERY_REQUEST_CODE = 1;
     private static final int PERMISSION_CODE = 1000;
-    private static final int REQUEST_IMAGE_CAPTURE = 1;
+    private static final int REQUEST_IMAGE_CAPTURE = 10;
     private Uri image_uri;
 
     private Bitmap mBitmap;
@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
         FirebaseApp.initializeApp(this);
         pickImage();
 
-
+        // Preparing the CAMERA Button to be click
         mButton_camera.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Pick the image from the gallery and add it on the imageView thanks to Bitmap
+    // Pick the image from the gallery and add it on the imageView thanks to Bitmap OR add the Camera Picture thanks to Uri
     @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
@@ -129,7 +129,12 @@ public class MainActivity extends AppCompatActivity {
 
             //recognizeMyText(mBitmap);
         }
+        // Need to bee called when image was captured from camera
+        if (resultCode == RESULT_OK) {
+            mSelectedImage.setImageURI(image_uri); // Set the image capture on our layout
+        }
     }
+
 
     private void openCamera() {
         ContentValues values = new ContentValues();
@@ -148,8 +153,7 @@ public class MainActivity extends AppCompatActivity {
         //this method is called, when user presses Allow or Deny from Permission Request Popup
         switch (requestCode) {
             case PERMISSION_CODE: {
-                if (grantResults.length > 0 && grantResults[0] ==
-                        PackageManager.PERMISSION_GRANTED) {
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     //permission from popup was granted
                     openCamera();
                 } else {
