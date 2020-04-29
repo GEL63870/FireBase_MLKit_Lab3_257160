@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">FireBase_MLKit_Lab3_257160</string>
+    <string name="label">Label</string>
+    <string name="pick_image">Pick image</string>
+    <string name="image_analyse_with_ml_kit">Image analyse with ML Kit</string>
+    <string name="text">Text</string>
+    <string name="object">Object</string>
+    <string name="camera">Camera</string>
+</resources>
