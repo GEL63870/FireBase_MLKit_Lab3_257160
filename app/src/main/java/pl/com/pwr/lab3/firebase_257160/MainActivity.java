@@ -21,11 +21,19 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.ml.vision.FirebaseVision;
+import com.google.firebase.ml.vision.common.FirebaseVisionImage;
+import com.google.firebase.ml.vision.text.FirebaseVisionText;
+import com.google.firebase.ml.vision.text.FirebaseVisionTextRecognizer;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -35,7 +43,8 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int GALLERY_REQUEST_CODE = 1;
     private static final int PERMISSION_CODE = 1000;
-    private static final int REQUEST_IMAGE_CAPTURE = 1001;
+    private static final int REQUEST_IMAGE_CAPTURE = 10;
+    private static final int IMAGE_CAPTURE_CODE = 1001;
     private Uri image_uri;
 
     private Bitmap mBitmap;
@@ -49,19 +58,34 @@ public class MainActivity extends AppCompatActivity {
         textview = findViewById(R.id.label);
 
         mButton_text = findViewById(R.id.text);
-        mButton_camera = findViewById(R.id.camera);
         mButton_object = findViewById(R.id.object);
 
         FirebaseApp.initializeApp(this);
         pickImage();
+        pickCameraImage();
+        recognizeMyText(mBitmap);
 
-        // Preparing the CAMERA Button to be click
+    }
+
+    // Activate the request of picking an image in the gallery
+    public void pickImage() {
+        mButton = findViewById(R.id.pick_image);
+        mButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.setType("image/*");
+                startActivityForResult(Intent.createChooser(intent, "Pick an image"), GALLERY_REQUEST_CODE);
+            }
+        });
+    }
+
+    public void pickCameraImage() {
+        mButton_camera = findViewById(R.id.camera);
         mButton_camera.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                dispatchTakePictureIntent();
-                textview.setText("");
-
+                // Ask to be able to enter the camera system only if you have permission (ask Manifest + Pop-up)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_DENIED || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
                         //permission not enabled, request it
@@ -78,63 +102,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-
-        mButton_text.setOnClickListener(new View.OnClickListener() {
-            @RequiresApi(api = Build.VERSION_CODES.KITKAT)
-            @Override
-            public void onClick(View v) {
-                //detectTextFromImage();
-            }
-        });
     }
-
-    // Activate the request of picking an image in the gallery
-    public void pickImage() {
-        mButton = findViewById(R.id.pick_image);
-        mButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-                intent.setType("image/*");
-                startActivityForResult(Intent.createChooser(intent, "Pick an image"), GALLERY_REQUEST_CODE);
-            }
-        });
-    }
-
-    // Able the user to open the phone camera and take a picture
-    private void dispatchTakePictureIntent() {
-        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
-            startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
-        }
-    }
-
-    // Pick the image from the gallery and add it on the imageView thanks to Bitmap OR add the Camera Picture thanks to Uri
-    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == GALLERY_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
-
-            InputStream inputStream = null;
-            try {
-                inputStream = getContentResolver().openInputStream(Objects.requireNonNull(data.getData()));
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            }
-            Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
-            mSelectedImage.setImageBitmap(bitmap);
-            //Bundle extras = data.getExtras();
-            //Bitmap bitmap = (Bitmap) extras.get("data");
-
-            //recognizeMyText(mBitmap);
-        }
-        // Need to bee called when image was captured from camera
-        if (resultCode == RESULT_OK) {
-            mSelectedImage.setImageURI(image_uri); // Set the image capture on our layout
-        }
-    }
-
 
     private void openCamera() {
         ContentValues values = new ContentValues();
@@ -144,10 +112,10 @@ public class MainActivity extends AppCompatActivity {
         //Camera intent
         Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, image_uri);
-        startActivityForResult(cameraIntent, REQUEST_IMAGE_CAPTURE);
+        startActivityForResult(cameraIntent, IMAGE_CAPTURE_CODE);
     }
 
-    //handling permission result
+    //Request handling permission result (Picture Taken with CAMERA)
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         //this method is called, when user presses Allow or Deny from Permission Request Popup
@@ -164,54 +132,64 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Pick the image from the gallery and add it on the imageView thanks to Bitmap OR add the Camera Picture thanks to Uri
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
 
- //   private void recognizeMyText(Bitmap bitmap) {
-//        FirebaseVisionTextRecognizer mFirebaseVisionTextRecognizer = FirebaseVision.getInstance().getOnDeviceTextRecognizer();
-  //      mFirebaseVisionTextRecognizer.processImage(firebaseVisionImage).addOnSuccessListener(new OnSuccessListener<FirebaseVisionText>() {
-    //        @Override
-      //      public void onSuccess(FirebaseVisionText firebaseVisionText) {
-        //        String text = firebaseVisionText.getText();
-//
-  //              if (text.isEmpty()) {
-    ///                Toast.makeText(MainActivity.this, "No Text Detected", Toast.LENGTH_SHORT).show();
-       //         } else {
-         //           // Intent intent = new Intent(MainActivity.this, ResultActivity.class);
-           //         // intent.putExtra(FinalTextRecognition.FINAL_TEXT, label);
-             //       // startActivity(intent);
-//
-  //                  textview.setText(text);
-    //            }
-      //      }
-        //});
-    //}
+        // Part for getting the result of pick Image from GALLERY
 
-  //  private void detectTextFromImage() {
-     //   FirebaseVisionImage firebaseVisionImage = FirebaseVisionImage.fromBitmap(mBitmap);
-    //    FirebaseVisionTextRecognizer mFirebaseVisionTextRecognizer = FirebaseVision.getInstance().getOnDeviceTextRecognizer();
-     //   mFirebaseVisionTextRecognizer.processImage(firebaseVisionImage).addOnSuccessListener(new OnSuccessListener<FirebaseVisionText>() {
-     //       @Override
-      //      public void onSuccess(FirebaseVisionText firebaseVisionText) {
-       //         displayTextFromImage(firebaseVisionText);
-      //      }
-     //   }).addOnFailureListener(new OnFailureListener() {
-      ////      @Override
-      //      public void onFailure(@NonNull Exception e) {
-      //          Toast.makeText(MainActivity.this, "Error" + e.getMessage(), Toast.LENGTH_SHORT).show();
-      //      }
-     //   });
+        if (requestCode == GALLERY_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
 
-  //  }
+            InputStream inputStream = null;
+            try {
+                inputStream = getContentResolver().openInputStream(Objects.requireNonNull(data.getData()));
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+            Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
+            mSelectedImage.setImageBitmap(bitmap);
 
-    //private void displayTextFromImage(FirebaseVisionText firebaseVisionText) {
-       // List<FirebaseVisionText.TextBlock> blockList = firebaseVisionText.getTextBlocks();
-     //   if (blockList.size() == 0) {
-       //     Toast.makeText(this, "No text found in image", Toast.LENGTH_SHORT).show();
-       // } else {
-         //   for (FirebaseVisionText.TextBlock block : firebaseVisionText.getTextBlocks()) {
-         //       AtomicReference<List<FirebaseVisionText.TextBlock>> text = new AtomicReference<>(firebaseVisionText.getTextBlocks());
-         //       textview.setText((CharSequence) text);
-         //   }
+            recognizeMyText(mBitmap);
+        }
 
-       // }
-  //  }
+        // Part for getting the result of pick Image from CAMERA
+        if (resultCode == RESULT_OK) {
+            Bitmap bitmap = MediaStore.Images.Media.getBitmap();
+            mSelectedImage.setImageBitmap(image_uri); // Set the image capture on our layout
+        }
+    }
+
+
+    private void recognizeMyText(Bitmap bitmap) {
+        mButton_text.setOnClickListener(new View.OnClickListener() {
+            @RequiresApi(api = Build.VERSION_CODES.KITKAT)
+            @Override
+            public void onClick(View v) {
+                //detectTextFromImage();
+            }
+        });
+
+        FirebaseVisionImage mFbImage = FirebaseVisionImage.fromBitmap(mBitmap);
+        FirebaseVisionTextRecognizer mFbTextRecognizer = FirebaseVision.getInstance().getOnDeviceTextRecognizer();
+
+        mFbTextRecognizer.processImage(mFbImage).addOnSuccessListener(new OnSuccessListener<FirebaseVisionText>() {
+            @Override
+            public void onSuccess(FirebaseVisionText firebaseVisionText) {
+                String text = firebaseVisionText.getText();
+
+                if (text.isEmpty()) {
+                    Toast.makeText(MainActivity.this, "No Text Detected", Toast.LENGTH_SHORT).show();
+                } else {
+                    Intent intent = new Intent(MainActivity.this, ResultActivity.class);
+                    intent.putExtra(FinalTextRecognition.FINAL_TEXT, text);
+                    startActivity(intent);
+
+                    textview.setText(text);
+                }
+            }
+        });
+    }
 }
+
