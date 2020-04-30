@@ -26,6 +26,9 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.ml.vision.FirebaseVision;
 import com.google.firebase.ml.vision.common.FirebaseVisionImage;
+import com.google.firebase.ml.vision.label.FirebaseVisionImageLabel;
+import com.google.firebase.ml.vision.label.FirebaseVisionImageLabeler;
+import com.google.firebase.ml.vision.label.FirebaseVisionOnDeviceImageLabelerOptions;
 import com.google.firebase.ml.vision.text.FirebaseVisionText;
 import com.google.firebase.ml.vision.text.FirebaseVisionTextRecognizer;
 
@@ -33,7 +36,6 @@ import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -63,8 +65,8 @@ public class MainActivity extends AppCompatActivity {
         FirebaseApp.initializeApp(this);
         pickImage();
         pickCameraImage();
-        recognizeMyText(mBitmap);
-
+        startTextRecognition();
+        startImageRecognition();
     }
 
     // Activate the request of picking an image in the gallery
@@ -73,6 +75,7 @@ public class MainActivity extends AppCompatActivity {
         mButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                mSelectedImage.setImageResource(0);
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.setType("image/*");
                 startActivityForResult(Intent.createChooser(intent, "Pick an image"), GALLERY_REQUEST_CODE);
@@ -80,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // Activate the request of picking an image thanks to CAMERA
     public void pickCameraImage() {
         mButton_camera = findViewById(R.id.camera);
         mButton_camera.setOnClickListener(new View.OnClickListener() {
@@ -139,7 +143,6 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
 
         // Part for getting the result of pick Image from GALLERY
-
         if (requestCode == GALLERY_REQUEST_CODE && resultCode == RESULT_OK && data != null) {
 
             InputStream inputStream = null;
@@ -150,46 +153,103 @@ public class MainActivity extends AppCompatActivity {
             }
             Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
             mSelectedImage.setImageBitmap(bitmap);
-
-            recognizeMyText(mBitmap);
         }
 
         // Part for getting the result of pick Image from CAMERA
         if (resultCode == RESULT_OK) {
-            Bitmap bitmap = MediaStore.Images.Media.getBitmap();
-            mSelectedImage.setImageBitmap(image_uri); // Set the image capture on our layout
+            //Bitmap bitmap = MediaStore.Images.Media.getBitmap();
+            mSelectedImage.setImageURI(image_uri); // Set the image capture on our layout
         }
     }
 
-
-    private void recognizeMyText(Bitmap bitmap) {
+    // Initiate the process of Text Recognition on the Selected Image which is one the ImageView layout
+    private void startTextRecognition() {
         mButton_text.setOnClickListener(new View.OnClickListener() {
             @RequiresApi(api = Build.VERSION_CODES.KITKAT)
             @Override
             public void onClick(View v) {
-                //detectTextFromImage();
+                textview.setText(" ");
+                runTextRecognition();
             }
         });
+    }
 
-        FirebaseVisionImage mFbImage = FirebaseVisionImage.fromBitmap(mBitmap);
+    private void runTextRecognition() {
+        mSelectedImage.buildDrawingCache();
+        Bitmap bmap = mSelectedImage.getDrawingCache();
+
+        FirebaseVisionImage mFbImage = FirebaseVisionImage.fromBitmap(bmap);
         FirebaseVisionTextRecognizer mFbTextRecognizer = FirebaseVision.getInstance().getOnDeviceTextRecognizer();
+        mButton_text.setEnabled(false);
 
         mFbTextRecognizer.processImage(mFbImage).addOnSuccessListener(new OnSuccessListener<FirebaseVisionText>() {
             @Override
             public void onSuccess(FirebaseVisionText firebaseVisionText) {
+                textview.setText(" ");
                 String text = firebaseVisionText.getText();
 
                 if (text.isEmpty()) {
                     Toast.makeText(MainActivity.this, "No Text Detected", Toast.LENGTH_SHORT).show();
+                    mButton_text.setEnabled(true);
                 } else {
-                    Intent intent = new Intent(MainActivity.this, ResultActivity.class);
-                    intent.putExtra(FinalTextRecognition.FINAL_TEXT, text);
-                    startActivity(intent);
-
+                    mButton_text.setEnabled(true);
                     textview.setText(text);
                 }
             }
+        }).addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(@NonNull Exception e) {
+                mButton_text.setEnabled(true);
+                textview.setText(R.string.text_not_foun);
+                e.printStackTrace();
+            }
         });
     }
+
+    private void startImageRecognition() {
+        mButton_object.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                runImageRecognition();
+            }
+        });
+    }
+
+    private void runImageRecognition() {
+        mSelectedImage.buildDrawingCache();
+        Bitmap bmap = mSelectedImage.getDrawingCache();
+        FirebaseVisionImage image = FirebaseVisionImage.fromBitmap(bmap);
+
+        // Set option to maximise the threshold of your detector
+        FirebaseVisionOnDeviceImageLabelerOptions options = new FirebaseVisionOnDeviceImageLabelerOptions.Builder()
+                .setConfidenceThreshold(0.7f)
+                .build();
+
+        // Run Image recognition process to analyse the image
+        FirebaseVisionImageLabeler labeler = FirebaseVision.getInstance().getOnDeviceImageLabeler(options);
+        labeler.processImage(image).addOnSuccessListener(new OnSuccessListener<List<FirebaseVisionImageLabel>>() {
+            @Override
+            public void onSuccess(List<FirebaseVisionImageLabel> labels) {
+                // Put Text and Confidence in string to pu it in final text view
+                for (FirebaseVisionImageLabel label : labels) {
+                    String text = label.getText();
+                    float confidence = label.getConfidence();
+
+                    String probability = Float.toString(confidence);
+                    String text_result = (text + "\n"+ "Probability = " + probability);
+                    textview.setText(text_result);
+                }
+
+            }
+        }).addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(@NonNull Exception e) {
+                textview.setText(R.string.label_not_found);
+                e.printStackTrace();
+            }
+        });
+    }
+
+
 }
 

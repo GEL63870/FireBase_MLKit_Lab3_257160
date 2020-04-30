@@ -6,4 +6,6 @@
     <string name="text">Text</string>
     <string name="object">Object</string>
     <string name="camera">Camera</string>
+    <string name="label_not_found">Label not found</string>
+    <string name="text_not_foun">Text not found</string>
 </resources>
