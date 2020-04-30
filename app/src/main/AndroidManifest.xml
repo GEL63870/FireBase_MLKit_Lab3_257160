@@ -29,6 +29,5 @@ package="pl.com.pwr.lab3.firebase_257160">
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
     </activity>
-    <activity android:name=".FinalTextRecognition"/>
 </application>
 </manifest>
